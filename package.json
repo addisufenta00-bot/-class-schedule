@@ -1,0 +1,16 @@
+{
+  "name": "university-class-schedule-root",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Root runner for University Class Scheduling System",
+  "scripts": {
+    "dev": "node run-dev.js",
+    "start": "node run-dev.js",
+    "client": "npm run dev --prefix frontend",
+    "frontend": "npm run dev --prefix frontend",
+    "server": "npm run dev --prefix backend",
+    "backend": "npm run dev --prefix backend",
+    "seed": "npm run seed --prefix backend",
+    "build": "npm run build --prefix frontend"
+  }
+}

@@ -1,0 +1,237 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  REGISTRAR
+  DEAN
+  DEPT_HEAD
+  GENERAL_SERVICE
+  LAB_COORDINATOR
+  CLASSROOM_USHER
+  INSTRUCTOR
+  STUDENT
+}
+
+enum ProgramType {
+  REGULAR
+  EXTENSION // Evening and Weekend
+}
+
+enum StreamType {
+  NONE
+  NATURAL_SCIENCE
+  SOCIAL_SCIENCE
+}
+
+enum RoomType {
+  LECTURE_HALL
+  COMPUTER_LAB
+  SCIENCE_LAB
+  STANDARD_CLASSROOM
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PARTIAL
+}
+
+model User {
+  id           String      @id @default(uuid())
+  name         String
+  username     String?     @unique
+  email        String      @unique
+  password     String      @default("password123")
+  role         Role        @default(STUDENT)
+  collegeId    String?
+  departmentId String?
+  college      College?    @relation(fields: [collegeId], references: [id])
+  department   Department? @relation(fields: [departmentId], references: [id])
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+model College {
+  id            String         @id @default(uuid())
+  name          String // e.g. "College of Engineering and Technology"
+  code          String         @unique // e.g. "COET"
+  deanName      String?
+  departments   Department[]
+  blockRequests BlockRequest[]
+  users         User[]
+  rooms         Room[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Department {
+  id             String       @id @default(uuid())
+  name           String
+  code           String       @unique
+  collegeId      String
+  college        College      @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  users          User[]
+  courses        Course[]
+  instructors    Instructor[]
+  sections       Section[]
+  allocatedRooms Room[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+// Request workflow between College Dean and General Services (አጠቃላይ አገልግሎት)
+model BlockRequest {
+  id                  String        @id @default(uuid())
+  collegeId           String
+  college             College       @relation(fields: [collegeId], references: [id], onDelete: Cascade)
+  academicYear        String        @default("2026/2027")
+  semester            Int           @default(1)
+  programType         ProgramType   @default(REGULAR)
+  requestedRoomsCount Int
+  totalStudents       Int           @default(0)
+  totalBatches        Int           @default(1)
+  departmentBatches   Json          @default("[]") // [{ departmentName: "Computer Science", code: "CS", batchCount: 3, studentCount: 120 }, ...]
+  status              RequestStatus @default(PENDING)
+  allocatedBlocks     Json          @default("[]") // e.g. ["Block 42", "Block 43"] - Lecture Blocks Only!
+  allocatedRoomIds    Json          @default("[]") // Specific lecture room IDs assigned by General Services
+  remarks             String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+}
+
+model Room {
+  id                 String         @id @default(uuid())
+  roomNumber         String         @unique // e.g. "B42-101", "Lab-2"
+  building           String // e.g. "Block 42", "Tech Complex"
+  capacity           Int
+  roomType           RoomType       @default(STANDARD_CLASSROOM)
+  programType        ProgramType    @default(REGULAR) // REGULAR or EXTENSION
+  allocatedCollegeId String? // Assigned to a College by General Services
+  allocatedCollege   College?       @relation(fields: [allocatedCollegeId], references: [id])
+  allocatedDeptId    String? // Assigned to a specific Department by the College Dean
+  allocatedDept      Department?    @relation(fields: [allocatedDeptId], references: [id])
+  isActive           Boolean        @default(true)
+  scheduleSlots      ScheduleSlot[]
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+}
+
+model Course {
+  id                 String             @id @default(uuid())
+  code               String             @unique // e.g. "CS301", "ENGL101"
+  name               String
+  creditHours        Int                @default(3)
+  weeklyLectureHours Int                @default(3)
+  weeklyLabHours     Int                @default(0)
+  requiresLab        Boolean            @default(false)
+  isFreshmanCommon   Boolean            @default(false) // Managed by Registrar
+  streamType         StreamType         @default(NONE)
+  programType        ProgramType        @default(REGULAR)
+  departmentId       String? // Nullable for university-wide freshman courses
+  department         Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  courseAssignments  CourseAssignment[]
+  scheduleSlots      ScheduleSlot[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model Instructor {
+  id                String             @id @default(uuid())
+  name              String
+  email             String             @unique
+  departmentId      String
+  department        Department         @relation(fields: [departmentId], references: [id])
+  maxCreditHours    Int                @default(12) // Maximum allowable credit hours per semester
+  unavailableSlots  Json               @default("[]")
+  courseAssignments CourseAssignment[]
+  scheduleSlots     ScheduleSlot[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model Section {
+  id                String             @id @default(uuid())
+  name              String // e.g. "CS Year 3 - Regular", "IT Year 2 - Extension"
+  year              Int
+  studentCount      Int
+  programType       ProgramType        @default(REGULAR)
+  streamType        StreamType         @default(NONE)
+  departmentId      String?
+  department        Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  courseAssignments CourseAssignment[]
+  scheduleSlots     ScheduleSlot[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model CourseAssignment {
+  id           String     @id @default(uuid())
+  courseId     String
+  course       Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructorId String
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  sectionId    String
+  section      Section    @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  sessionType  String     @default("LECTURE") // LECTURE or LAB
+  creditHours  Int        @default(3)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([courseId, sectionId, sessionType])
+}
+
+model TimeSlot {
+  id            String         @id @default(uuid())
+  programType   ProgramType    @default(REGULAR)
+  dayOfWeek     DayOfWeek
+  periodNumber  Int // 1..8
+  startTime     String // "08:30" or "18:00"
+  endTime       String // "09:30" or "19:00"
+  scheduleSlots ScheduleSlot[]
+
+  @@unique([programType, dayOfWeek, periodNumber])
+}
+
+model ScheduleSlot {
+  id           String      @id @default(uuid())
+  academicYear String      @default("2026/2027")
+  semester     Int         @default(1)
+  programType  ProgramType @default(REGULAR)
+  courseId     String
+  course       Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  instructorId String
+  instructor   Instructor  @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  sectionId    String
+  section      Section     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  roomId       String
+  room         Room        @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  timeSlotId   String
+  timeSlot     TimeSlot    @relation(fields: [timeSlotId], references: [id], onDelete: Cascade)
+  isLab        Boolean     @default(false)
+  isLocked     Boolean     @default(false)
+  isUnlocked   Boolean     @default(false) // Usher status: Room door is unlocked
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([roomId, timeSlotId]) // Room cannot be double-booked
+  @@unique([instructorId, timeSlotId]) // Instructor cannot be double-booked
+  @@unique([sectionId, timeSlotId]) // Section cannot be double-booked
+}
